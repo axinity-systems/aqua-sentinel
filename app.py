@@ -131,6 +131,13 @@ st.markdown(
             width: 100%;
         }
     }
+
+    .stSlider, .stSlider * {
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+    }
     </style>
     """,
     unsafe_allow_html=True,
