@@ -132,7 +132,7 @@ st.markdown(
         }
     }
 
-    .stSlider, .stSlider * {
+    .stApp, .stApp *{
         user-select: none;
         -webkit-user-select: none;
         -moz-user-select: none;
