@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import time
+from streamlit.components.v1 import html
 
 st.set_page_config(
     page_title="Aqua Sentinel",
@@ -18,6 +19,10 @@ st.markdown(
 
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
     }
 
     .main {
@@ -393,7 +398,7 @@ def render_tank(water_level, turbidity, ph, do, conductivity, bod, nitrate, temp
     </body>
     </html>
     """
-    st.html(html_code, height=340, width=220)
+    html(html_code, height=340, width=220)
 
 def render_flow_diagram(scale, flow_rate, pressure, abnormal_event, n_items=None):
     if scale == "Household":
@@ -406,11 +411,10 @@ def render_flow_diagram(scale, flow_rate, pressure, abnormal_event, n_items=None
     nodes = []
     edges = []
 
-    # Determine which nodes will leak (1-2 for Colony/City when abnormal)
     leak_indices = []
     if abnormal_event and scale in ["Colony", "City"]:
         num_leaks = min(2, n_items)
-        leak_indices = list(range(num_leaks))  # first 1-2 nodes
+        leak_indices = list(range(num_leaks))
 
     if scale == "Household":
         nodes = [
@@ -434,7 +438,7 @@ def render_flow_diagram(scale, flow_rate, pressure, abnormal_event, n_items=None
             edges.append({"from": "source", "to": f"house{i}", "flow": input_flow, "leak": is_leak})
             nodes.append({"id": f"monitor{i}", "label": f"Node {i+1}", "type": "circle", "x": x+15, "y": y})
             edges.append({"from": f"house{i}", "to": f"monitor{i}", "flow": output_flow, "leak": is_leak})
-    else:  # City
+    else:
         nodes.append({"id": "plant", "label": "Treatment Plant", "type": "tank", "x": 50, "y": 5})
         for i in range(n_items):
             angle = (i / n_items) * 2 * np.pi
@@ -491,7 +495,7 @@ def render_flow_diagram(scale, flow_rate, pressure, abnormal_event, n_items=None
         svg_elements.append(f'<text x="{x_px}" y="{y_px+5}" font-family="Inter" font-size="12" text-anchor="middle" fill="#0f172a">{node["label"]}</text>')
 
     svg = f'<svg viewBox="0 0 {svg_width} {svg_height}" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:auto; background:white; border:1px solid #e2e8f0; border-radius:8px;">{"".join(svg_elements)}</svg>'
-    st.html(svg, height=500, width=800)
+    html(svg, height=500, width=800)
 
 def show_source_tank():
     st.markdown("## 💧 Source Tank Water Quality Analysis")
