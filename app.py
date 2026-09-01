@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import joblib
 import time
-from streamlit.components.v1 import html
 
 st.set_page_config(
     page_title="Aqua Sentinel",
@@ -130,13 +129,6 @@ st.markdown(
         .stButton>button {
             width: 100%;
         }
-    }
-
-    .stApp, .stApp *{
-        user-select: none;
-        -webkit-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
     }
     </style>
     """,
@@ -401,7 +393,7 @@ def render_tank(water_level, turbidity, ph, do, conductivity, bod, nitrate, temp
     </body>
     </html>
     """
-    html(html_code, height=340, width=220)
+    st.html(html_code, height=340, width=220)
 
 def render_flow_diagram(scale, flow_rate, pressure, abnormal_event, n_items=None):
     if scale == "Household":
@@ -414,6 +406,12 @@ def render_flow_diagram(scale, flow_rate, pressure, abnormal_event, n_items=None
     nodes = []
     edges = []
 
+    # Determine which nodes will leak (1-2 for Colony/City when abnormal)
+    leak_indices = []
+    if abnormal_event and scale in ["Colony", "City"]:
+        num_leaks = min(2, n_items)
+        leak_indices = list(range(num_leaks))  # first 1-2 nodes
+
     if scale == "Household":
         nodes = [
             {"id": "source", "label": "Source Tank", "type": "tank", "x": 10, "y": 50},
@@ -421,8 +419,8 @@ def render_flow_diagram(scale, flow_rate, pressure, abnormal_event, n_items=None
             {"id": "outlet", "label": "Outlet", "type": "circle", "x": 90, "y": 50}
         ]
         edges = [
-            {"from": "source", "to": "house", "flow": flow_rate},
-            {"from": "house", "to": "outlet", "flow": flow_rate, "pressure": pressure}
+            {"from": "source", "to": "house", "flow": flow_rate, "leak": abnormal_event},
+            {"from": "house", "to": "outlet", "flow": flow_rate * 0.3 if abnormal_event else flow_rate, "leak": abnormal_event, "pressure": pressure}
         ]
     elif scale == "Colony":
         nodes.append({"id": "source", "label": "Central Source", "type": "tank", "x": 5, "y": 50})
@@ -430,19 +428,25 @@ def render_flow_diagram(scale, flow_rate, pressure, abnormal_event, n_items=None
             x = 40 + (i % 3) * 20
             y = 20 + (i // 3) * 40
             nodes.append({"id": f"house{i}", "label": f"House {i+1}", "type": "box", "x": x, "y": y})
-            edges.append({"from": "source", "to": f"house{i}", "flow": flow_rate/n_items})
+            is_leak = i in leak_indices
+            input_flow = flow_rate / n_items
+            output_flow = input_flow * 0.3 if is_leak else input_flow
+            edges.append({"from": "source", "to": f"house{i}", "flow": input_flow, "leak": is_leak})
             nodes.append({"id": f"monitor{i}", "label": f"Node {i+1}", "type": "circle", "x": x+15, "y": y})
-            edges.append({"from": f"house{i}", "to": f"monitor{i}", "flow": flow_rate/n_items})
-    else:
+            edges.append({"from": f"house{i}", "to": f"monitor{i}", "flow": output_flow, "leak": is_leak})
+    else:  # City
         nodes.append({"id": "plant", "label": "Treatment Plant", "type": "tank", "x": 50, "y": 5})
         for i in range(n_items):
             angle = (i / n_items) * 2 * np.pi
             x = 50 + 40 * np.cos(angle)
             y = 50 + 40 * np.sin(angle)
             nodes.append({"id": f"zone{i}", "label": f"Zone {i+1}", "type": "box", "x": x, "y": y})
-            edges.append({"from": "plant", "to": f"zone{i}", "flow": flow_rate/n_items})
+            is_leak = i in leak_indices
+            input_flow = flow_rate / n_items
+            output_flow = input_flow * 0.3 if is_leak else input_flow
+            edges.append({"from": "plant", "to": f"zone{i}", "flow": input_flow, "leak": is_leak})
             nodes.append({"id": f"monitor{i}", "label": f"Monitor {i+1}", "type": "circle", "x": x*0.8+10, "y": y*0.8+10})
-            edges.append({"from": f"zone{i}", "to": f"monitor{i}", "flow": flow_rate/n_items})
+            edges.append({"from": f"zone{i}", "to": f"monitor{i}", "flow": output_flow, "leak": is_leak})
 
     svg_width = 800
     svg_height = 500
@@ -457,19 +461,19 @@ def render_flow_diagram(scale, flow_rate, pressure, abnormal_event, n_items=None
         y1_px = y1 * svg_height / 100
         x2_px = x2 * svg_width / 100
         y2_px = y2 * svg_height / 100
-        stroke_color = "#475569"
+
+        stroke_color = "#ef4444" if edge.get("leak", False) else "#475569"
         stroke_width = 4
-        if abnormal_event:
-            stroke_color = "#ef4444"
-            stroke_width = 4
+        if edge.get("leak", False):
             leak_x = (x1_px + x2_px) / 2
             leak_y = (y1_px + y2_px) / 2
             svg_elements.append(f'<circle cx="{leak_x}" cy="{leak_y}" r="6" fill="#ef4444" opacity="0.8"><animate attributeName="r" from="3" to="12" dur="1s" repeatCount="indefinite"/><animate attributeName="opacity" from="0.8" to="0" dur="1s" repeatCount="indefinite"/></circle>')
             svg_elements.append(f'<circle cx="{leak_x}" cy="{leak_y + 20}" r="3" fill="#ef4444" opacity="0.6"><animate attributeName="cy" from="{leak_y+20}" to="{leak_y+40}" dur="0.8s" repeatCount="indefinite"/><animate attributeName="opacity" from="0.6" to="0" dur="0.8s" repeatCount="indefinite"/></circle>')
+
         svg_elements.append(f'<line x1="{x1_px}" y1="{y1_px}" x2="{x2_px}" y2="{y2_px}" stroke="{stroke_color}" stroke-width="{stroke_width}" marker-end="url(#arrow)"/>')
         label_x = (x1_px + x2_px) / 2 + 10
         label_y = (y1_px + y2_px) / 2 - 10
-        svg_elements.append(f'<text x="{label_x}" y="{label_y}" font-family="Inter" font-size="12" fill="#475569">{edge["flow"]:.1f} L/min</text>')
+        svg_elements.append(f'<text x="{label_x}" y="{label_y}" font-family="Inter" font-size="12" fill="{stroke_color}">{edge["flow"]:.1f} L/min</text>')
 
     for node in nodes:
         x_px = node["x"] * svg_width / 100
@@ -487,7 +491,7 @@ def render_flow_diagram(scale, flow_rate, pressure, abnormal_event, n_items=None
         svg_elements.append(f'<text x="{x_px}" y="{y_px+5}" font-family="Inter" font-size="12" text-anchor="middle" fill="#0f172a">{node["label"]}</text>')
 
     svg = f'<svg viewBox="0 0 {svg_width} {svg_height}" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:auto; background:white; border:1px solid #e2e8f0; border-radius:8px;">{"".join(svg_elements)}</svg>'
-    html(svg, height=500, width=800)
+    st.html(svg, height=500, width=800)
 
 def show_source_tank():
     st.markdown("## 💧 Source Tank Water Quality Analysis")
